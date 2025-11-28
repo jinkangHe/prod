@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>婚纱目录在线编辑与排版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+body { margin:0; font-family: 'Microsoft Yahei', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#f6f7f9; color:#222; }
+.layout { display:grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 16px; }
+.panel { background:#fff; border-radius:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding:16px; position: sticky; top: 0; align-self: start; height: 100vh; overflow: auto; }
+.panel h2 { margin:0 0 12px; font-size:18px; }
+.panel .group { margin-bottom: 14px; }
+.panel label { display:block; font-size:12px; color:#555; margin-bottom:6px; }
+.panel input[type="text"], .panel input[type="number"], .panel input[type="color"], .panel select { width:100%; box-sizing:border-box; border:1px solid #dcdfe5; border-radius:10px; padding:8px 10px; font-size:14px; background:#fbfcff; }
+.panel .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+.panel .btn { display:inline-flex; align-items:center; justify-content:center; padding:10px 12px; border:none; border-radius:10px; background:#4f6ef7; color:#fff; font-size:14px; cursor:pointer; }
+.panel .btn.secondary { background:#eef1f7; color:#2b4b85; }
+.panel .btn + .btn { margin-left:8px; }
+.color-row { display:flex; align-items:center; gap:8px; }
+.color-row .swatch { width:36px; height:24px; border-radius:6px; border:1px solid #ccd3e0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04); }
+.list { max-height: 50vh; overflow:auto; border:1px solid #e5e8ef; border-radius:12px; }
+.list-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #eef1f7; cursor:pointer; }
+.list-item:hover { background:#f5f7fc; }
+.list-item .name { font-size:13px; font-weight:600; color:#2b2b2b; }
+.list-item .actions { display:flex; gap:6px; }
+.list-item .actions .mini { background:#eef1f7; color:#2b4b85; padding:6px 8px; font-size:12px; border-radius:8px; border:none; cursor:pointer; }
+.pages { background:#fff; border-radius:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding:12px; }
+.pages .grid { display:block; }
+.page { width: 297mm; height: 210mm; padding: var(--page-padding, 12mm 14mm); box-sizing: border-box; background:#fff; color:#222; position:relative; }
+.info { display:flex; flex-direction:column; gap: var(--info-gap, 8mm); overflow-wrap:anywhere; word-break:break-word; }
+.info h2 { margin:0; font-size: var(--title-size, 32pt); letter-spacing: 0.03em; font-weight:500; color: var(--title-color, #222222); font-family: var(--title-family, 'Palatino Linotype','Garamond','Times New Roman','Microsoft Yahei',serif); }
+.info p { margin:0; font-size: var(--desc-size, 13pt); line-height: 1.75; font-weight:400; color: var(--desc-color, #333333); font-family: var(--desc-family, 'Palatino Linotype','Garamond','Times New Roman','Microsoft Yahei',serif); }
+.price { margin-top:auto; align-self:flex-end; font-size: 16pt; color: var(--price-color, #333333); letter-spacing:0.15em; text-transform:uppercase; font-weight:600; }
+.photos { display:grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: 1fr 0.7fr; gap: var(--grid-gap, 9mm); width:100%; height:100%; }
+figure { margin:0; border-radius: 10px; overflow:hidden; position:relative; background:#eee; }
+figure img { width:100%; height:100%; object-fit:cover; display:block; }
+figure figcaption { position:absolute; bottom:8px; left:12px; font-size:12px; letter-spacing:0.2em; color:rgba(255,255,255,0.85); }
+.photos.free { position:relative; }
+.photos.free figure { position:absolute; user-select:none; }
+.photos.free { touch-action:none; }
+.photos figure { cursor: grab; }
+.photos figure.dragging { cursor: grabbing; }
+.draggable { position:absolute; user-select:none; cursor: grab; touch-action:none; z-index:1; }
+.draggable.dragging { cursor: grabbing; z-index:10; }
+.page .draggable > * { pointer-events: none; }
+.page[data-editing="true"] { outline: 2px dashed #4f6ef7; outline-offset: -2px; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,0.35); display:none; align-items:center; justify-content:center; z-index:1000; }
+.modal .card { background:#fff; width:560px; max-width:92vw; border-radius:16px; box-shadow:0 18px 55px rgba(0,0,0,0.16); padding:20px; border:1px solid #e5e8ef; }
+.modal .card h3 { margin:0 0 12px; font-size:18px; }
+.modal .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+.modal .group { margin-bottom:14px; }
+.modal .group label { display:block; font-size:12px; color:#58627a; margin-bottom:6px; }
+.modal input[type="text"], .modal input[type="number"], .modal select { width:100%; box-sizing:border-box; border:1px solid #dcdfe5; border-radius:12px; padding:10px 12px; font-size:14px; background:#fbfcff; }
+.modal input[type="text"]:focus, .modal input[type="number"]:focus, .modal select:focus { outline:none; border-color:#4f6ef7; box-shadow:0 0 0 3px rgba(79,110,247,0.15); background:#fff; }
+.modal input[type="file"] { width:100%; box-sizing:border-box; border:1px dashed #dcdfe5; border-radius:12px; padding:10px; background:#fbfcff; }
+.modal input[type="file"]::file-selector-button { margin-right:10px; border:none; background:#eef1f7; color:#2b4b85; padding:8px 12px; border-radius:8px; cursor:pointer; }
+.modal .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:8px; }
+.modal .btn { display:inline-flex; align-items:center; justify-content:center; padding:10px 14px; border:none; border-radius:10px; background:#4f6ef7; color:#fff; font-size:14px; cursor:pointer; }
+.modal .btn.secondary { background:#eef1f7; color:#2b4b85; }
+.modal .btn:hover { filter:brightness(0.95); }
+.modal .actions { display:flex; justify-content:flex-end; gap:8px; }
+.draggable .resize-handle { pointer-events: none; position:absolute; width:14px; height:14px; right:-7px; bottom:-7px; background:#4f6ef7; border-radius:50%; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.2); cursor:se-resize; opacity:0; transition:opacity .12s ease; }
+.draggable:hover .resize-handle { opacity:1; pointer-events: auto; }
+.photos figure { cursor: grab; }
+.photos figure.dragging { cursor: grabbing; }
+.toolbar { display:flex; gap:8px; align-items:center; margin-top:8px; }
+.hint { font-size:12px; color:#666; }
+.editor { background:#fff; border-radius:16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding:16px; margin-top:16px; }
+.editor h3 { margin:0 0 12px; font-size:16px; }
+.grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+.image-box { display:flex; flex-direction:column; gap:8px; align-items:center; }
+.image-box .title { font-size:12px; color:#555; }
+.image-box .preview { width:180px; height:140px; border:1px dashed #dcdcdc; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#999; background:#fafafa; overflow:hidden; }
+.image-box .preview img { width:100%; height:100%; object-fit:cover; display:block; }
+input[type=file].hidden { position:absolute; left:-9999px; top:-9999px; }
+@page { size: A4 landscape; margin: 0; }
+html, body { height:100%; }
+@media print {
+  .panel, .editor { display:none !important; }
+  .layout { grid-template-columns: 1fr; padding: 0; }
+  .pages { padding: 0; box-shadow: none; }
+  body { background:#fff; }
+  .page { margin: 0; page-break-after: always; }
+  .resize-handle { display:none !important; }
+  .modal { display:none !important; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <div class="panel">
+    <h2>素材与样式</h2>
+    <div class="group">
+      <button class="btn" id="pickDirBtn">选择素材目录</button>
+      <div class="hint">使用支持目录访问的浏览器（如 Chrome/Edge）以保存修改</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="newBtn">新建产品</button>
+      <button class="btn secondary" id="reloadBtn">重新读取</button>
+    </div>
+    <div class="group">
+      <label>产品列表</label>
+      <div class="list" id="list"></div>
+    </div>
+    <div class="group">
+      <label>标题字体</label>
+      <select id="titleFamilySelect">
+        <option>Palatino Linotype</option>
+        <option>Garamond</option>
+        <option>Times New Roman</option>
+        <option>Cormorant Garamond</option>
+        <option>Didot</option>
+        <option>Microsoft Yahei</option>
+        <option>Songti SC</option>
+        <option>KaiTi</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="group"><label>标题字号(pt)</label><input id="titleSize" type="number" min="10" max="72" value="32" /></div>
+      <div class="group"><label>标题颜色</label><div class="color-row"><input id="titleColor" type="color" value="#222222" /><div id="swatchTitle" class="swatch"></div></div></div>
+    </div>
+    <div class="group">
+      <label>正文字体</label>
+      <select id="descFamilySelect">
+        <option>Palatino Linotype</option>
+        <option>Garamond</option>
+        <option>Times New Roman</option>
+        <option>Cormorant Garamond</option>
+        <option>Didot</option>
+        <option>Microsoft Yahei</option>
+        <option>Songti SC</option>
+        <option>KaiTi</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="group"><label>正文字号(pt)</label><input id="descSize" type="number" min="8" max="48" value="13" /></div>
+      <div class="group"><label>正文颜色</label><div class="color-row"><input id="descColor" type="color" value="#333333" /><div id="swatchDesc" class="swatch"></div></div></div>
+    </div>
+    <div class="row">
+      <div class="group"><label>价格颜色</label><div class="color-row"><input id="priceColor" type="color" value="#333333" /><div id="swatchPrice" class="swatch"></div></div></div>
+      <div class="group"><label>信息区间距(mm)</label><input id="infoGap" type="number" min="0" max="30" value="8" /></div>
+    </div>
+    <div class="row">
+      <div class="group"><label>图片栅格间距(mm)</label><input id="gridGap" type="number" min="0" max="30" value="9" /></div>
+      <div class="group"><label>页内边距(mm)</label><input id="pagePad" type="text" value="12mm 14mm" /></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="printBtn">直接打印</button>
+      <button class="btn secondary" id="exportBtn">导出 HTML</button>
+    </div>
+  </div>
+  <div class="pages">
+    <div class="grid" id="pages"></div>
+    <div class="editor" id="editor" style="display:none;">
+      <h3>编辑产品</h3>
+      <div class="row"><div class="group"><label>名称</label><input id="nameEdit" type="text" /></div><div class="group"><label>价格</label><input id="priceEdit" type="text" /></div></div>
+      <div class="group"><label>介绍</label><input id="descEdit" type="text" /></div>
+      <div class="grid2">
+        <div class="image-box"><div class="title">主图正面</div><div class="preview" id="prevFront">无图</div><input class="hidden" id="fileFront" type="file" accept="image/*" /></div>
+        <div class="image-box"><div class="title">主图背面</div><div class="preview" id="prevBack">无图</div><input class="hidden" id="fileBack" type="file" accept="image/*" /></div>
+        <div class="image-box"><div class="title">细节图一</div><div class="preview" id="prevDetail1">无图</div><input class="hidden" id="fileDetail1" type="file" accept="image/*" /></div>
+        <div class="image-box"><div class="title">细节图二</div><div class="preview" id="prevDetail2">无图</div><input class="hidden" id="fileDetail2" type="file" accept="image/*" /></div>
+      </div>
+      <div class="toolbar"><button class="btn" id="saveBtn">保存修改</button><button class="btn secondary" id="deleteBtn">删除产品</button></div>
+    </div>
+  </div>
+  <!-- 新建产品对话框 -->
+  <div id="newModal" class="modal">
+    <div class="card">
+      <h3>新建产品</h3>
+      <div class="group"><label>名称</label><input id="newName" type="text" /></div>
+      <div class="row">
+        <div class="group"><label>价格</label><input id="newPrice" type="text" /></div>
+        <div class="group"><label>介绍</label><input id="newDesc" type="text" /></div>
+      </div>
+      <div class="row">
+        <div class="group"><label>主图正面</label><input id="newFront" type="file" accept="image/*" /></div>
+        <div class="group"><label>主图背面</label><input id="newBack" type="file" accept="image/*" /></div>
+      </div>
+      <div class="row">
+        <div class="group"><label>细节图一</label><input id="newDetail1" type="file" accept="image/*" /></div>
+        <div class="group"><label>细节图二</label><input id="newDetail2" type="file" accept="image/*" /></div>
+      </div>
+      <div class="actions">
+        <button class="btn secondary" id="newCancel">取消</button>
+        <button class="btn" id="newCreate">创建</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let rootHandle=null
+let entries=[]
+let currentIndex=-1
+let editingIndex=-1
+const pickDirBtn=document.getElementById('pickDirBtn')
+const list=document.getElementById('list')
+const newBtn=document.getElementById('newBtn')
+const reloadBtn=document.getElementById('reloadBtn')
+const nameEdit=document.getElementById('nameEdit')
+const priceEdit=document.getElementById('priceEdit')
+const descEdit=document.getElementById('descEdit')
+const prevFront=document.getElementById('prevFront')
+const prevBack=document.getElementById('prevBack')
+const prevDetail1=document.getElementById('prevDetail1')
+const prevDetail2=document.getElementById('prevDetail2')
+const fileFront=document.getElementById('fileFront')
+const fileBack=document.getElementById('fileBack')
+const fileDetail1=document.getElementById('fileDetail1')
+const fileDetail2=document.getElementById('fileDetail2')
+const editor=document.getElementById('editor')
+const exportBtn = document.getElementById('exportBtn')
+const printBtn = document.getElementById('printBtn')
+const pages = document.getElementById('pages')
+function getVal(id){return document.getElementById(id).value}
+function settings(){return{
+  titleFamily:document.getElementById('titleFamilySelect').value,titleSize:getVal('titleSize'),titleColor:getVal('titleColor'),
+  descFamily:document.getElementById('descFamilySelect').value,descSize:getVal('descSize'),descColor:getVal('descColor'),
+  priceColor:getVal('priceColor'),infoGap:getVal('infoGap'),gridGap:getVal('gridGap'),pagePad:getVal('pagePad')
+}}
+function parseLegacyText(text){
+  let name='', price='', lines=[], collecting=false
+  for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(!line){if(collecting)lines.push('');continue}
+    if(line.startsWith('名称：')){name=line.split('：',2)[1].trim();collecting=false}
+    else if(line.startsWith('介绍：')){lines=[line.split('：',2)[1].trim()];collecting=true}
+    else if(line.startsWith('价格：')){price=line.split('：',2)[1].trim();collecting=false}
+    else if(collecting){lines.push(line)}
+  }
+  const desc=lines.filter(x=>x.trim()||x==='').join('\n').trim()
+  return {name, price, description:desc}
+}
+function normalizeMeta(data){
+  if(typeof data!=='object'||!data) return {name:'',price:'',description:''}
+  const name=(String(data.name||'')).trim()
+  const price=(String(data.price||'')).trim()
+  let desc=''
+  const d=data.description
+  if(typeof d==='string') desc=d.trim()
+  else if(Array.isArray(d)) desc=d.map(x=>typeof x==='string'?x.trim():'').filter(Boolean).join('\n')
+  else if(typeof d==='number') desc=String(d)
+  if(!desc && typeof data.desc==='string') desc=data.desc.trim()
+  return {name, price, description:desc}
+}
+function toHTMLSafe(s){const div=document.createElement('div');div.textContent=s||'';return div.innerHTML}
+function paragraphHTML(s){return toHTMLSafe(s).replace(/\n/g,'<br />')}
+async function readFileText(handle){const f=await handle.getFile();return await f.text()}
+async function readFileDataURL(handle){const f=await handle.getFile();return await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)})}
+async function loadEntries(){if(!rootHandle) return; entries=[]; const ignoreNames=new Set(['模板']); for await(const [name, h] of rootHandle.entries()){if(!h||name.startsWith('.')||ignoreNames.has(name)) continue; if(h.kind!=='directory') continue; const folder=h; let meta={name:'',price:'',description:''}; let infoJson=null, infoTxt=null; try{const j=await folder.getFileHandle('信息.json').catch(()=>null); if(j){infoJson=j; const data=JSON.parse(await readFileText(j)); meta=normalizeMeta(data)} }catch{} if(!infoJson){ const t=await folder.getFileHandle('信息.txt').catch(()=>null); if(t){infoTxt=t; meta=parseLegacyText(await readFileText(t)) } }
+  const names={front:'主图正面.jpg',back:'主图背面.jpg',detail1:'细节图一.jpg',detail2:'细节图二.jpg'}; const imgs={}; for(const k in names){const fh=await folder.getFileHandle(names[k]).catch(()=>null); imgs[k]=fh? await readFileDataURL(fh):''}
+  entries.push({slug:name, name:meta.name||name, price:meta.price||'', desc:meta.description||'', images:imgs}) }
+  entries.sort((a,b)=>a.slug.localeCompare(b.slug)); renderList(); renderPreview() }
+function renderList(){
+  list.innerHTML=''
+  for(let i=0;i<entries.length;i++){
+    const e=entries[i]
+    const row=document.createElement('div'); row.className='list-item'
+    const nm=document.createElement('div'); nm.className='name'; nm.textContent=e.slug
+    const act=document.createElement('div'); act.className='actions'
+    const edit=document.createElement('button'); edit.className='mini'; edit.textContent=(editingIndex===i?'完成编辑':'编辑')
+    edit.addEventListener('click',(ev)=>{ev.stopPropagation(); toggleEdit(i)})
+    const del=document.createElement('button'); del.className='mini'; del.textContent='删除'; del.addEventListener('click',(ev)=>{ev.stopPropagation(); deleteByIndex(i)})
+    act.appendChild(edit); act.appendChild(del)
+    row.appendChild(nm); row.appendChild(act)
+    row.addEventListener('click',()=>openEditor(i))
+    list.appendChild(row)
+  }
+}
+function toggleEdit(i){ if(editingIndex===i){ editingIndex=-1 } else { editingIndex=i; scrollToPage(i) } applyEditingState(); renderList() }
+function applyEditingState(){ const ps=pages.querySelectorAll('.page'); ps.forEach((p,idx)=>{ if(idx===editingIndex){ p.setAttribute('data-editing','true') } else { p.removeAttribute('data-editing') } }) }
+function deleteByIndex(i){ if(i<0||i>=entries.length) return; currentIndex=i; deleteCurrent() }
+function setPreview(el, dataURL){el.innerHTML=''; if(dataURL){const img=document.createElement('img'); img.src=dataURL; el.appendChild(img)} else {el.textContent='无图'} }
+function openEditor(i){ currentIndex=i; scrollToPage(i); enableEditMode(i) }
+function scrollToPage(i){ const ps=pages.querySelectorAll('.page'); if(ps[i]) ps[i].scrollIntoView({behavior:'smooth',block:'start'}) }
+function enableEditMode(i){ const ps=pages.querySelectorAll('.page'); ps.forEach(p=>p.removeAttribute('data-editing')); if(ps[i]) ps[i].setAttribute('data-editing','true') }
+function bindPreviewClick(previewEl, fileInput){previewEl.addEventListener('click',()=>fileInput.click()); fileInput.addEventListener('change',()=>{const f=fileInput.files[0]; if(f){const fr=new FileReader(); fr.onload=()=>{previewEl.innerHTML=''; const img=document.createElement('img'); img.src=fr.result; previewEl.appendChild(img)}; fr.readAsDataURL(f)}})}
+bindPreviewClick(prevFront, fileFront); bindPreviewClick(prevBack, fileBack); bindPreviewClick(prevDetail1, fileDetail1); bindPreviewClick(prevDetail2, fileDetail2)
+async function ensureUniqueFolder(base){let candidate=base.trim()||'新婚纱'; let idx=1; while(true){const exists=await rootHandle.getDirectoryHandle(candidate).then(()=>true).catch(()=>false); if(!exists) return candidate; candidate=base.trim()? `${base}-${idx}`: `新婚纱-${idx}`; idx++} }
+async function saveChanges(){if(currentIndex<0||!rootHandle) return; const e=entries[currentIndex]; const folder=await rootHandle.getDirectoryHandle(e.slug); const payload={name:nameEdit.value.trim(), price:priceEdit.value.trim(), description:descEdit.value.trim(), desc:descEdit.value.trim()}; const jsonHandle=await folder.getFileHandle('信息.json').catch(async ()=>await folder.getFileHandle('信息.json',{create:true})); const w=await jsonHandle.createWritable(); await w.write(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'})); await w.close(); const map=[['front','主图正面.jpg',fileFront],['back','主图背面.jpg',fileBack],['detail1','细节图一.jpg',fileDetail1],['detail2','细节图二.jpg',fileDetail2]]; for(const [key,name,input] of map){const f=input.files[0]; if(f){const fh=await folder.getFileHandle(name,{create:true}); const ww=await fh.createWritable(); await ww.write(f); await ww.close(); entries[currentIndex].images[key]=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)})} } entries[currentIndex].name=payload.name; entries[currentIndex].price=payload.price; entries[currentIndex].desc=payload.description; renderPreview() }
+async function deleteCurrent(){if(currentIndex<0||!rootHandle) return; const e=entries[currentIndex]; await rootHandle.removeEntry(e.slug,{recursive:true}); entries.splice(currentIndex,1); currentIndex=-1; editor.style.display='none'; renderList(); renderPreview() }
+async function createNew(){
+  if(!rootHandle) return;
+  const base = nameEdit.value.trim();
+  if(!base){ alert('请先填写“名称”，再选择四张图片'); nameEdit.focus(); return }
+  const need = [fileFront, fileBack, fileDetail1, fileDetail2]
+  const allPicked = need.every(inp => inp && inp.files && inp.files[0])
+  if(!allPicked){
+    alert('请分别选择主图正面、主图背面、细节图一、细节图二')
+    // 引导用户选择图片（源于点击手势）
+    fileFront.click(); fileBack.click(); fileDetail1.click(); fileDetail2.click();
+    return
+  }
+  const folderName = await ensureUniqueFolder(base)
+  const folder = await rootHandle.getDirectoryHandle(folderName,{create:true})
+  const payload = {name:base, price:priceEdit.value.trim()||'', description:descEdit.value.trim()||'', desc:descEdit.value.trim()||''}
+  const jsonHandle = await folder.getFileHandle('信息.json',{create:true})
+  const w = await jsonHandle.createWritable(); await w.write(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'})); await w.close()
+  const map=[['主图正面.jpg',fileFront,'front'],['主图背面.jpg',fileBack,'back'],['细节图一.jpg',fileDetail1,'detail1'],['细节图二.jpg',fileDetail2,'detail2']]
+  const imgs={front:'',back:'',detail1:'',detail2:''}
+  for(const [name,input,key] of map){ const f=input.files[0]; const fh=await folder.getFileHandle(name,{create:true}); const ww=await fh.createWritable(); await ww.write(f); await ww.close(); const url=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)}); imgs[key]=url }
+  entries.push({slug:folderName, name:payload.name, price:payload.price, desc:payload.description, images:imgs}); renderList(); renderPreview(); openEditor(entries.length-1)
+}
+
+function openNewModal(){ document.getElementById('newModal').style.display='flex' }
+function closeNewModal(){ document.getElementById('newModal').style.display='none' }
+document.getElementById('newCancel').addEventListener('click', closeNewModal)
+document.getElementById('newCreate').addEventListener('click', async ()=>{
+  const busyEl=document.getElementById('busy'); if(busyEl) busyEl.style.display='flex'
+  if(!rootHandle) { alert('请先选择素材目录'); if(busyEl) busyEl.style.display='none'; return }
+  const base = (document.getElementById('newName').value||'').trim();
+  if(!base){ alert('请填写产品名称'); if(busyEl) busyEl.style.display='none'; return }
+  const newPrice = (document.getElementById('newPrice').value||'').trim()
+  const newDesc = (document.getElementById('newDesc').value||'').trim()
+  const newFront = document.getElementById('newFront')
+  const newBack = document.getElementById('newBack')
+  const newDetail1 = document.getElementById('newDetail1')
+  const newDetail2 = document.getElementById('newDetail2')
+  const need = [newFront, newBack, newDetail1, newDetail2]
+  const allPicked = need.every(inp => inp && inp.files && inp.files[0])
+  if(!allPicked){ alert('请分别选择主图正面、主图背面、细节图一、细节图二'); if(busyEl) busyEl.style.display='none'; return }
+  const folderName = await ensureUniqueFolder(base)
+  const folder = await rootHandle.getDirectoryHandle(folderName,{create:true})
+  const payload = {name:base, price:newPrice, description:newDesc, desc:newDesc}
+  const jsonHandle = await folder.getFileHandle('信息.json',{create:true})
+  const w = await jsonHandle.createWritable(); await w.write(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'})); await w.close()
+  const map=[['主图正面.jpg',newFront,'front'],['主图背面.jpg',newBack,'back'],['细节图一.jpg',newDetail1,'detail1'],['细节图二.jpg',newDetail2,'detail2']]
+  const imgs={front:'',back:'',detail1:'',detail2:''}
+  for(const [name,input,key] of map){ const f=input.files[0]; const fh=await folder.getFileHandle(name,{create:true}); const ww=await fh.createWritable(); await ww.write(f); await ww.close(); const url=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)}); imgs[key]=url }
+  entries.push({slug:folderName, name:payload.name, price:payload.price, desc:payload.description, images:imgs}); renderList(); renderPreview(); closeNewModal(); if(busyEl) busyEl.style.display='none'; scrollToPage(entries.length-1); enableEditMode(entries.length-1)
+})
+async function pickDirectory(){if(window.showDirectoryPicker){rootHandle=await window.showDirectoryPicker(); await loadEntries()} }
+function pageHTML(entry, cfg){
+  const title=toHTMLSafe(entry.name)
+  const price=toHTMLSafe(entry.price)
+  const desc=paragraphHTML(entry.desc)
+  const photosStyle = 'position:relative;width:100%;height:100%;'
+  const photosClass = 'photos free'
+  return `
+  <section class="page" style="--title-family:${cfg.titleFamily},'Garamond','Times New Roman','Microsoft Yahei',serif;--desc-family:${cfg.descFamily},'Garamond','Times New Roman','Microsoft Yahei',serif;--title-size:${cfg.titleSize}pt;--title-color:${cfg.titleColor};--desc-size:${cfg.descSize}pt;--desc-color:${cfg.descColor};--price-color:${cfg.priceColor};--info-gap:${cfg.infoGap}mm;--grid-gap:${cfg.gridGap}mm;--page-padding:${cfg.pagePad};">
+    <div class="draggable" data-key="title" style="left:5%;top:5%;width:40%;">
+      <h2 style="margin:0;font-size:${cfg.titleSize}pt;color:${cfg.titleColor};font-family:${cfg.titleFamily},'Garamond','Times New Roman','Microsoft Yahei',serif;">${title}</h2>
+    </div>
+    <div class="draggable" data-key="desc" style="left:5%;top:18%;width:40%;">
+      <p style="margin:0;font-size:${cfg.descSize}pt;line-height:1.75;color:${cfg.descColor};font-family:${cfg.descFamily},'Garamond','Times New Roman','Microsoft Yahei',serif;">${desc||''}</p>
+    </div>
+    <div class="draggable" data-key="price" style="left:47%;top:5%;width:20%;">
+      <div class="price">Price ¥${price}</div>
+    </div>
+    <div class="${photosClass}" style="${photosStyle}">
+      <figure class="draggable" data-key="front" style="left:5%;top:18%;width:30%;height:65%;"><img style="width:100%;height:100%;object-fit:cover;" src="${entry.images.front}" alt="${title} 主图正面" /><span class="resize-handle" data-dir="se"></span></figure>
+      <figure class="draggable" data-key="back" style="left:38%;top:18%;width:30%;height:65%;"><img style="width:100%;height:100%;object-fit:cover;" src="${entry.images.back}" alt="${title} 主图背面" /><span class="resize-handle" data-dir="se"></span></figure>
+      <figure class="draggable" data-key="detail1" style="left:72%;top:18%;width:26%;height:35%;"><img style="width:100%;height:100%;object-fit:cover;" src="${entry.images.detail1}" alt="${title} 细节一" /><figcaption>DETAIL</figcaption><span class="resize-handle" data-dir="se"></span></figure>
+      <figure class="draggable" data-key="detail2" style="left:72%;top:58%;width:26%;height:35%;"><img style="width:100%;height:100%;object-fit:cover;" src="${entry.images.detail2}" alt="${title} 细节二" /><figcaption>DETAIL</figcaption><span class="resize-handle" data-dir="se"></span></figure>
+    </div>
+  </section>`
+}
+function renderPreview(){pages.innerHTML='';const cfg=settings();const frag=document.createDocumentFragment();for(const e of entries){const div=document.createElement('div');div.innerHTML=pageHTML(e,cfg);frag.appendChild(div.firstElementChild)} pages.appendChild(frag)}
+function exportHTML(){const cfg=settings();const html=`<!DOCTYPE html><html lang='zh-CN'><head><meta charset='UTF-8'><title>婚纱目录预览</title><style>@page{size:A4 landscape;margin:0}html,body{width:297mm;height:210mm;margin:0}body{font-family:'PingFang SC','Microsoft Yahei',sans-serif;background:#fff}.page{width:297mm;height:210mm;padding:${cfg.pagePad};box-sizing:border-box;position:relative;page-break-after:always}.draggable{position:absolute}.resize-handle{display:none!important}.info{display:block}.info h2{margin:0;font-size:${cfg.titleSize}pt;letter-spacing:.03em;font-weight:500;color:${cfg.titleColor};font-family:${cfg.titleFamily},'Garamond','Times New Roman','Microsoft Yahei',serif}.info p{margin:0;font-size:${cfg.descSize}pt;line-height:1.75;font-weight:400;color:${cfg.descColor};font-family:${cfg.descFamily},'Garamond','Times New Roman','Microsoft Yahei',serif}.price{font-size:16pt;color:${cfg.priceColor};letter-spacing:.15em;text-transform:uppercase;font-weight:600}.photos{position:relative;width:100%;height:100%}figure{margin:0;border-radius:10px;overflow:hidden;position:absolute;background:#eee}figure img{width:100%;height:100%;object-fit:cover;display:block}figure figcaption{position:absolute;bottom:8px;left:12px;font-size:12px;letter-spacing:.2em;color:rgba(255,255,255,.85)}</style></head><body>${pages.innerHTML}</body></html>`
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'})
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='catalog-preview.html';a.click();URL.revokeObjectURL(a.href)
+}
+exportBtn.addEventListener('click',exportHTML)
+printBtn.addEventListener('click',()=>window.print())
+pickDirBtn.addEventListener('click',pickDirectory)
+reloadBtn.addEventListener('click',loadEntries)
+newBtn.addEventListener('click',openNewModal)
+document.getElementById('saveBtn').addEventListener('click',saveChanges)
+document.getElementById('deleteBtn').addEventListener('click',deleteCurrent)
+
+// 拖拽调整图片位置：网格模式为图片内部位置，自由模式为整块移动
+function enableDragOnImages(){
+  const blocks = pages.querySelectorAll('.page .draggable')
+  blocks.forEach(block=>{
+    const container = block.closest('.page')
+    const pageIdx = Number(container?.dataset?.index||'-1')
+    let dragging=false, startX=0, startY=0, offsetX=0, offsetY=0, startLeft=0, startTop=0
+    function getFigPercent(){
+      const crect = container.getBoundingClientRect()
+      const frect = block.getBoundingClientRect()
+      const lp = (frect.left - crect.left) / crect.width * 100
+      const tp = (frect.top - crect.top) / crect.height * 100
+      return [lp, tp]
+    }
+    function clampPos(nx, ny){
+      const crect = container.getBoundingClientRect()
+      const w = block.offsetWidth / crect.width * 100
+      const h = block.offsetHeight / crect.height * 100
+      const cx = Math.max(0, Math.min(100 - w, nx))
+      const cy = Math.max(0, Math.min(100 - h, ny))
+      return [cx, cy]
+    }
+    function onPointerDown(e){
+      if(pageIdx!==editingIndex) return
+      dragging=true
+      block.classList.add('dragging')
+      const crect = container.getBoundingClientRect()
+      const frect = block.getBoundingClientRect()
+      startX = e.clientX
+      startY = e.clientY
+      offsetX = startX - frect.left
+      offsetY = startY - frect.top
+      const p = getFigPercent()
+      startLeft = p[0]
+      startTop = p[1]
+      block.setPointerCapture && block.setPointerCapture(e.pointerId || 0)
+    }
+    function onPointerMove(e){
+      if(!dragging) return
+      const crect = container.getBoundingClientRect()
+      const leftPx = e.clientX - crect.left - offsetX
+      const topPx = e.clientY - crect.top - offsetY
+      let nx = leftPx / crect.width * 100
+      let ny = topPx / crect.height * 100
+      const c = clampPos(nx, ny)
+      block.style.left = c[0] + '%'
+      block.style.top = c[1] + '%'
+    }
+    function onPointerUp(){
+      dragging=false
+      block.classList.remove('dragging')
+    }
+    block.addEventListener('pointerdown',onPointerDown)
+    window.addEventListener('pointermove',onPointerMove)
+    window.addEventListener('pointerup',onPointerUp)
+  })
+}
+
+// 每次渲染后启用拖拽
+const _origRender = renderPreview
+function renderPreview(){
+  pages.innerHTML=''
+  const cfg=settings()
+  const frag=document.createDocumentFragment()
+  entries.forEach((e,idx)=>{
+    const div=document.createElement('div')
+    div.innerHTML=pageHTML(e,cfg)
+    const sec=div.firstElementChild
+    sec.dataset.index=String(idx)
+    frag.appendChild(sec)
+  })
+  pages.appendChild(frag)
+  enableDragOnImages()
+  enableResizeOnImages()
+  enableInlineEdit()
+}
+// 图片块尺寸拉伸（右下角手柄）
+function enableResizeOnImages(){
+  const handles = pages.querySelectorAll('.page figure.draggable .resize-handle')
+  handles.forEach(handle=>{
+    const fig = handle.closest('figure')
+    const container = fig.closest('.page')
+    const pageIdx = Number(container?.dataset?.index||'-1')
+    let resizing=false, startX=0, startY=0, startW=0, startH=0, startLeftPerc=0, startTopPerc=0
+    function onPointerDown(e){
+      if(pageIdx!==editingIndex) return
+      resizing=true
+      const crect = container.getBoundingClientRect()
+      const frect = fig.getBoundingClientRect()
+      startX = e.clientX
+      startY = e.clientY
+      startW = frect.width
+      startH = frect.height
+      startLeftPerc = (frect.left - crect.left)/crect.width*100
+      startTopPerc = (frect.top - crect.top)/crect.height*100
+      handle.setPointerCapture && handle.setPointerCapture(e.pointerId||0)
+      e.preventDefault()
+    }
+    function onPointerMove(e){
+      if(!resizing) return
+      const crect = container.getBoundingClientRect()
+      let newWpx = Math.max(40, startW + (e.clientX - startX))
+      let newHpx = Math.max(40, startH + (e.clientY - startY))
+      const maxWpx = crect.width - (crect.width*startLeftPerc/100)
+      const maxHpx = crect.height - (crect.height*startTopPerc/100)
+      newWpx = Math.min(newWpx, maxWpx)
+      newHpx = Math.min(newHpx, maxHpx)
+      fig.style.width = (newWpx / crect.width * 100) + '%'
+      fig.style.height = (newHpx / crect.height * 100) + '%'
+    }
+    function onPointerUp(){ resizing=false }
+    handle.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  })
+}
+// 页面内直接编辑：文字单击进入可编辑，图片单击选择文件
+function enableInlineEdit(){
+  const secs=pages.querySelectorAll('.page')
+  secs.forEach(sec=>{
+    const idx=Number(sec.dataset.index||'-1'); if(isNaN(idx)||idx<0) return
+    sec.querySelectorAll('.draggable').forEach(block=>{
+      const key=block.getAttribute('data-key')||''
+      if(key==='title' || key==='desc' || key==='price'){
+        const target=block.querySelector(key==='price'? '.price' : key==='title'? 'h2' : 'p')
+        if(target){
+          target.contentEditable='false'
+          target.addEventListener('dblclick', async ()=>{
+            if(idx!==editingIndex) return
+            const current = key==='title'? entries[idx].name : key==='desc'? entries[idx].desc : entries[idx].price
+            const next = prompt('编辑内容', current||'')
+            if(next===null) return
+            if(key==='title') entries[idx].name=next.trim()
+            else if(key==='price') entries[idx].price=next.trim()
+            else entries[idx].desc=next
+            await writeInfoJson(idx)
+            renderPreview(); applyEditingState()
+          })
+        }
+      } else if(key==='front' || key==='back' || key==='detail1' || key==='detail2'){
+        block.addEventListener('dblclick', ()=>{
+          if(idx!==editingIndex) return
+          const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'
+          inp.onchange=async ()=>{ const f=inp.files&&inp.files[0]; if(!f) return; const url=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)})
+            entries[idx].images[key]=url; await writeImageFile(idx,key,f); renderPreview(); applyEditingState() }
+          inp.click()
+        })
+      }
+    })
+  })
+}
+async function writeInfoJson(idx){ if(!rootHandle) return; const e=entries[idx]; const folder=await rootHandle.getDirectoryHandle(e.slug); const jsonHandle=await folder.getFileHandle('信息.json',{create:true}); const payload={name:e.name, price:e.price, description:e.desc, desc:e.desc}; const w=await jsonHandle.createWritable(); await w.write(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'})); await w.close() }
+async function writeImageFile(idx,key,file){ if(!rootHandle) return; const e=entries[idx]; const folder=await rootHandle.getDirectoryHandle(e.slug); const map={front:'主图正面.jpg', back:'主图背面.jpg', detail1:'细节图一.jpg', detail2:'细节图二.jpg'}; const fh=await folder.getFileHandle(map[key],{create:true}); const w=await fh.createWritable(); await w.write(file); await w.close() }
+// 自动渲染：样式输入变更时实时刷新
+const autoIds=['titleFamilySelect','descFamilySelect','titleSize','descSize','titleColor','descColor','priceColor','infoGap','gridGap','pagePad']
+autoIds.forEach(id=>{const el=document.getElementById(id); if(el){ const ev=el.tagName==='SELECT'?'change':'input'; el.addEventListener(ev,()=>renderPreview()) }})
+// 编辑区变更时更新当前条目并刷新预览（不立即写盘）
+(function(){
+  const elName=document.getElementById('nameEdit')
+  const elPrice=document.getElementById('priceEdit')
+  const elDesc=document.getElementById('descEdit')
+  function bind(el,key){ if(!el) return; el.addEventListener('input',()=>{ if(currentIndex>=0){ const e=entries[currentIndex]; if(key==='name') e.name=el.value.trim(); else if(key==='price') e.price=el.value.trim(); else e.desc=el.value; renderPreview() } }) }
+  bind(elName,'name')
+  bind(elPrice,'price')
+  bind(elDesc,'desc')
+})()
+// 颜色预览绑定
+function bindColor(id, swatchId){ const inp=document.getElementById(id); const s=document.getElementById(swatchId); const apply=()=>{ if(s) s.style.background=inp.value }; inp.addEventListener('input',apply); apply() }
+bindColor('titleColor','swatchTitle')
+bindColor('descColor','swatchDesc')
+bindColor('priceColor','swatchPrice')
+</script>
+</body>
+</html>
